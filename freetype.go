@@ -257,6 +257,37 @@ func (c *Context) DrawString(s string, p fixed.Point26_6) (fixed.Point26_6, erro
 	return p, nil
 }
 
+func (c *Context) GetStringWidth(s string) (fixed.Int26_6, error) {
+	if c.f == nil {
+		return fixed.Point26_6{}.X, errors.New("freetype: DrawText called with a nil font")
+	}
+	p := fixed.Point26_6{}
+	prev, hasPrev := truetype.Index(0), false
+	for _, rune := range s {
+		index := c.f.Index(rune)
+		if hasPrev {
+			kern := c.f.Kern(c.scale, prev, index)
+			if c.hinting != font.HintingNone {
+				kern = (kern + 32) &^ 63
+			}
+			p.X += kern
+		}
+		advanceWidth, mask, offset, err := c.glyph(index, p)
+		if err != nil {
+			return fixed.Point26_6{}.X, err
+		}
+		p.X += advanceWidth
+		glyphRect := mask.Bounds().Add(offset)
+		dr := c.clip.Intersect(glyphRect)
+		if !dr.Empty() {
+			// mp := image.Point{0, dr.Min.Y - glyphRect.Min.Y}
+			// draw.DrawMask(c.dst, dr, c.src, image.ZP, mask, mp, draw.Over)
+		}
+		prev, hasPrev = index, true
+	}
+	return p.X, nil
+}
+
 // recalc recalculates scale and bounds values from the font size, screen
 // resolution and font metrics, and invalidates the glyph cache.
 func (c *Context) recalc() {
